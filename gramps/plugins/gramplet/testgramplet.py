@@ -1,7 +1,6 @@
 # Gramps - a GTK+/GNOME based genealogy program
 #
-# Copyright (C) 2007-2009  Douglas S. Blank <doug.blank@gmail.com>
-# Copyright (C) 2020       Dave Scheipers
+# Copyright (C) 2024  Douglas S. Blank <doug.blank@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +18,7 @@
 from gramps.gui.widgets.mdgramplet import MarkdownGramplet
 
 
-class WelcomeGramplet(MarkdownGramplet):
-    """Displays a welcome note to the user."""
+class TestGramplet(MarkdownGramplet):
+    """Demonstrates Gramps object links — edit, navigate, and switch views."""
 
-    md_file = "welcomegramplet"
+    md_file = "testgramplet"
