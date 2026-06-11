@@ -1666,6 +1666,7 @@ def _refresh_editor_person_views(editor) -> None:
         return
 
     for name in (
+        "_update_from_db",
         "_update_events",
         "_update_event_list",
         "_update_notebook",

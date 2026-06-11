@@ -323,6 +323,31 @@ class EditPerson(EditPrimary):
             # we just rebuild the view always
             self.event_list.rebuild_callback()
 
+    def _update_from_db(self) -> None:
+        """Sync self.obj events and notes from the DB and rebuild their views.
+
+        Called after an external write (e.g. FamilySearch sync) commits new
+        events or notes directly to the database without going through the
+        editor's in-memory object.
+        """
+        phandle = self.obj.get_handle()
+        if not self.dbstate.db.has_person_handle(phandle):
+            return
+        person = self.dbstate.db.get_person_from_handle(phandle)
+        # Events: PersonEventEmbedList.get_data() re-reads via get_event_ref_list(),
+        # so replacing the list is safe.
+        self.obj.set_event_ref_list(person.get_event_ref_list())
+        self.obj.birth_ref_index = person.birth_ref_index
+        self.obj.death_ref_index = person.death_ref_index
+        # Notes: NoteTab holds a direct reference to the list object, so mutate
+        # in-place to keep the reference valid.
+        note_list = self.obj.get_note_list()
+        note_list.clear()
+        note_list.extend(person.get_note_list())
+        self.event_list.rebuild_callback()
+        if hasattr(self, "note_tab"):
+            self.note_tab.rebuild_callback()
+
     def event_updated(self, obj):
         # place in event might have changed, or person event shown in the list
         # we just rebuild the view always
