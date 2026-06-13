@@ -208,7 +208,7 @@ class DateParserVI(DateParser):
             )
 
         self._numeric = re.compile(
-            r"((\d+)\s*năm\s*)?((\d+)\s*tháng\s*)?(\d+)?\s*ngày?\s*$",
+            r"((\d+)\s*năm\s*)?((\d+)\s*tháng\s*)?(\d+)?\s*(?:ngày)?\s*$",
             re.IGNORECASE,
         )
 
@@ -233,6 +233,17 @@ class DateDisplayVI(DateDisplay):
     _bce_str = "%s TCN"
 
     display = DateDisplay.display_formatted
+
+    def __init__(self, *args, **kwargs):
+        """Initialize with corrected Vietnamese modifier strings."""
+        super().__init__(*args, **kwargs)
+        mod_list = list(self._mod_str)
+        mod_list[Date.MOD_BEFORE] = "trước "
+        mod_list[Date.MOD_AFTER] = "sau "
+        mod_list[Date.MOD_ABOUT] = "khoảng "
+        mod_list[Date.MOD_FROM] = "từ "
+        mod_list[Date.MOD_TO] = "đến "
+        self._mod_str = tuple(mod_list)
 
     def _display_vietnamese_lunar(self, date_val, **kwargs):
         """Display a Vietnamese Lunar date in ngày/tháng/năm format.

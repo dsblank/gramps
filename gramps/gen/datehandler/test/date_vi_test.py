@@ -191,5 +191,116 @@ class TestDateDisplayVI(unittest.TestCase):
         self.assertIn("Tháng Chạp", result)
 
 
+class TestVietnameseModifierParsing(unittest.TestCase):
+    """Tests for modifier parsing and display in the Vietnamese date handler."""
+
+    def setUp(self):
+        """Create parser and displayer instances."""
+        self.dp = DateParserVI()
+        self.dd = DateDisplayVI()
+
+    def _parse(self, text):
+        """Parse a date string and return the Date object."""
+        return self.dp.parse(text)
+
+    # --- modifier_to_int ---
+
+    def test_truoc_in_modifier_to_int(self):
+        """'trước' is registered as MOD_BEFORE."""
+        self.assertEqual(self.dp.modifier_to_int["trước"], Date.MOD_BEFORE)
+
+    def test_sau_in_modifier_to_int(self):
+        """'sau' is registered as MOD_AFTER."""
+        self.assertEqual(self.dp.modifier_to_int["sau"], Date.MOD_AFTER)
+
+    def test_khoang_in_modifier_to_int(self):
+        """'khoảng' is registered as MOD_ABOUT."""
+        self.assertEqual(self.dp.modifier_to_int["khoảng"], Date.MOD_ABOUT)
+
+    # --- parser: modifier + bare year ---
+
+    def test_parse_truoc_year(self):
+        """'trước 2000' parses as MOD_BEFORE year=2000."""
+        d = self._parse("trước 2000")
+        self.assertEqual(d.get_modifier(), Date.MOD_BEFORE)
+        self.assertEqual(d.get_year(), 2000)
+
+    def test_parse_sau_year(self):
+        """'sau 1949' parses as MOD_AFTER year=1949."""
+        d = self._parse("sau 1949")
+        self.assertEqual(d.get_modifier(), Date.MOD_AFTER)
+        self.assertEqual(d.get_year(), 1949)
+
+    def test_parse_khoang_year(self):
+        """'khoảng 1850' parses as MOD_ABOUT year=1850."""
+        d = self._parse("khoảng 1850")
+        self.assertEqual(d.get_modifier(), Date.MOD_ABOUT)
+        self.assertEqual(d.get_year(), 1850)
+
+    # --- display: modifier strings have trailing space ---
+
+    def test_display_truoc_has_trailing_space(self):
+        """MOD_BEFORE display string ends with a space (prefix convention)."""
+        mod_str = self.dd._mod_str[Date.MOD_BEFORE]
+        self.assertTrue(mod_str.endswith(" "), repr(mod_str))
+
+    def test_display_sau_has_trailing_space(self):
+        """MOD_AFTER display string ends with a space (prefix convention)."""
+        mod_str = self.dd._mod_str[Date.MOD_AFTER]
+        self.assertTrue(mod_str.endswith(" "), repr(mod_str))
+
+    def test_display_khoang_has_trailing_space(self):
+        """MOD_ABOUT display string ends with a space (prefix convention)."""
+        mod_str = self.dd._mod_str[Date.MOD_ABOUT]
+        self.assertTrue(mod_str.endswith(" "), repr(mod_str))
+
+    # --- display: modifier appears BEFORE the date ---
+
+    def test_display_before_is_prefix(self):
+        """'trước' appears before '2000' in display output."""
+        d = Date()
+        d.set(modifier=Date.MOD_BEFORE, value=(0, 0, 2000, False))
+        result = self.dd.display(d)
+        self.assertIn("trước", result)
+        self.assertLess(result.index("trước"), result.index("2000"))
+
+    def test_display_after_is_prefix(self):
+        """'sau' appears before '1949' in display output."""
+        d = Date()
+        d.set(modifier=Date.MOD_AFTER, value=(0, 0, 1949, False))
+        result = self.dd.display(d)
+        self.assertIn("sau", result)
+        self.assertLess(result.index("sau"), result.index("1949"))
+
+    # --- round-trips ---
+
+    def test_roundtrip_before(self):
+        """Display then re-parse 'before 2000' round-trips correctly."""
+        d = Date()
+        d.set(modifier=Date.MOD_BEFORE, value=(0, 0, 2000, False))
+        displayed = self.dd.display(d)
+        d2 = self._parse(displayed)
+        self.assertEqual(d2.get_modifier(), Date.MOD_BEFORE)
+        self.assertEqual(d2.get_year(), 2000)
+
+    def test_roundtrip_after(self):
+        """Display then re-parse 'after 1949' round-trips correctly."""
+        d = Date()
+        d.set(modifier=Date.MOD_AFTER, value=(0, 0, 1949, False))
+        displayed = self.dd.display(d)
+        d2 = self._parse(displayed)
+        self.assertEqual(d2.get_modifier(), Date.MOD_AFTER)
+        self.assertEqual(d2.get_year(), 1949)
+
+    def test_roundtrip_about(self):
+        """Display then re-parse 'about 1850' round-trips correctly."""
+        d = Date()
+        d.set(modifier=Date.MOD_ABOUT, value=(0, 0, 1850, False))
+        displayed = self.dd.display(d)
+        d2 = self._parse(displayed)
+        self.assertEqual(d2.get_modifier(), Date.MOD_ABOUT)
+        self.assertEqual(d2.get_year(), 1850)
+
+
 if __name__ == "__main__":
     unittest.main()
