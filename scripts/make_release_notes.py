@@ -70,7 +70,7 @@ def get_commits(from_tag, to_tag, repo):
         ".commits[] | "
         "{sha: .sha[0:8], "
         " author: .author.login, "
-        " message: (.commit.message | split(\"\\n\")[0])}"
+        ' message: (.commit.message | split("\\n")[0])}'
     )
     output = gh("api", f"repos/{repo}/compare/{from_tag}...{to_tag}", "--jq", jq)
     commits = []
@@ -130,7 +130,9 @@ def filter_commits(commits):
     return [c for c in commits if not SKIP_PATTERNS.match(c["message"])]
 
 
-def save_cache(path, tag, from_tag, repo, release_date, release_body, commits, milestone_items):
+def save_cache(
+    path, tag, from_tag, repo, release_date, release_body, commits, milestone_items
+):
     """Save fetched GitHub data to a JSON file for later re-use."""
     data = {
         "tag": tag,
@@ -186,8 +188,7 @@ def generate_notes(release_body, commits, tag, repo, release_date, model):
         sys.exit(1)
 
     commit_lines = "\n".join(
-        f"- [{c['sha']}] @{c['author'] or 'unknown'}: {c['message']}"
-        for c in commits
+        f"- [{c['sha']}] @{c['author'] or 'unknown'}: {c['message']}" for c in commits
     )
 
     prompt = f"""You are generating release notes for Gramps genealogy software.
@@ -435,9 +436,7 @@ def main():
     elif not to_tag:
         if not from_tag:
             parser.error("--to-tag or --from-tag is required")
-        print(
-            f"Resolving latest tag in series from {from_tag}...", file=sys.stderr
-        )
+        print(f"Resolving latest tag in series from {from_tag}...", file=sys.stderr)
         to_tag = get_latest_tag_in_series(from_tag, args.repo)
         if not to_tag:
             parser.error(
@@ -467,7 +466,9 @@ def main():
         )
     else:
         if not from_tag:
-            parser.error("--from-tag is required when no cache file exists (or with --no-cache)")
+            parser.error(
+                "--from-tag is required when no cache file exists (or with --no-cache)"
+            )
 
         tag = to_tag
         repo = args.repo
