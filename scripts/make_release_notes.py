@@ -38,8 +38,8 @@ Usage:
     # Notes between any two arbitrary tags
     python3 scripts/make_release_notes.py --from-tag v6.0.5 --to-tag v6.0.6
 
-    # Wildcard: resolve the latest tag matching a pattern (includes pre-releases)
-    python3 scripts/make_release_notes.py --from-tag v6.0.8 --to-tag "6.1.*"
+    # Wildcards work on both --from-tag and --to-tag
+    python3 scripts/make_release_notes.py --from-tag "6.0.*" --to-tag "6.1.*"
 """
 
 import argparse
@@ -417,6 +417,14 @@ def main():
     )
     args = parser.parse_args()
 
+    from_tag = args.from_tag
+    if from_tag and ("*" in from_tag or "?" in from_tag):
+        print(f"Resolving wildcard pattern {from_tag!r}...", file=sys.stderr)
+        from_tag = resolve_wildcard_tag(from_tag, args.repo)
+        if not from_tag:
+            parser.error(f"No tags matched pattern {args.from_tag!r} in {args.repo}")
+        print(f"  Using --from-tag {from_tag}", file=sys.stderr)
+
     to_tag = args.to_tag
     if to_tag and ("*" in to_tag or "?" in to_tag):
         print(f"Resolving wildcard pattern {to_tag!r}...", file=sys.stderr)
@@ -425,15 +433,15 @@ def main():
             parser.error(f"No tags matched pattern {args.to_tag!r} in {args.repo}")
         print(f"  Using --to-tag {to_tag}", file=sys.stderr)
     elif not to_tag:
-        if not args.from_tag:
+        if not from_tag:
             parser.error("--to-tag or --from-tag is required")
         print(
-            f"Resolving latest tag in series from {args.from_tag}...", file=sys.stderr
+            f"Resolving latest tag in series from {from_tag}...", file=sys.stderr
         )
-        to_tag = get_latest_tag_in_series(args.from_tag, args.repo)
+        to_tag = get_latest_tag_in_series(from_tag, args.repo)
         if not to_tag:
             parser.error(
-                f"No tags found in the same series as {args.from_tag} in {args.repo}"
+                f"No tags found in the same series as {from_tag} in {args.repo}"
             )
         print(f"  Using --to-tag {to_tag}", file=sys.stderr)
 
@@ -458,11 +466,10 @@ def main():
             file=sys.stderr,
         )
     else:
-        if not args.from_tag:
+        if not from_tag:
             parser.error("--from-tag is required when no cache file exists (or with --no-cache)")
 
         tag = to_tag
-        from_tag = args.from_tag
         repo = args.repo
 
         print(f"Fetching release info for {tag}...", file=sys.stderr)
