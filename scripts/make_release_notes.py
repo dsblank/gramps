@@ -374,14 +374,18 @@ def main():
         "--to-tag",
         default=None,
         help=(
-            "Release tag, e.g. v6.1.0-beta1. "
+            "Release tag, e.g. v6.1.0-beta1. Accepts glob patterns such as '6.1.*' "
+            "(resolves to the newest matching tag). "
             "Defaults to the latest tag in the same major.minor series as --from-tag."
         ),
     )
     parser.add_argument(
         "--from-tag",
         default=None,
-        help="Previous release tag, e.g. v6.0.7 (required when no cache exists)",
+        help=(
+            "Previous release tag, e.g. v6.0.7 (required when no cache exists). "
+            "Accepts glob patterns such as '6.0.*' (resolves to the newest matching tag)."
+        ),
     )
     parser.add_argument(
         "--repo", default="gramps-project/gramps", help="GitHub repo (owner/name)"
