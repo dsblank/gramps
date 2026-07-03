@@ -37,9 +37,13 @@ Usage:
 
     # Notes between any two arbitrary tags
     python3 scripts/make_release_notes.py --from-tag v6.0.5 --to-tag v6.0.6
+
+    # Wildcard: resolve the latest tag matching a pattern (includes pre-releases)
+    python3 scripts/make_release_notes.py --from-tag v6.0.8 --to-tag "6.1.*"
 """
 
 import argparse
+import fnmatch
 import json
 import re
 import subprocess
@@ -304,12 +308,15 @@ def format_milestone_section(items, repo):
     return "\n".join(lines) + "\n"
 
 
-def get_latest_tag_in_series(from_tag, repo):
-    """Return the newest tag sharing the same major.minor version as from_tag."""
-    match = re.match(r"^v?(\d+)\.(\d+)", from_tag)
-    if not match:
-        return None
-    prefix = f"v{match.group(1)}.{match.group(2)}."
+def version_key(tag):
+    """Sort key for version tags: by numeric components, releases above pre-releases."""
+    base = tag.split("-")[0]  # strip pre-release suffix (e.g. -beta1, -rc1)
+    nums = tuple(int(n) for n in re.findall(r"\d+", base))
+    return (nums, "-" not in tag)
+
+
+def fetch_all_tags(repo):
+    """Return all tag names for a GitHub repo."""
     tags = []
     page = 1
     while True:
@@ -324,16 +331,25 @@ def get_latest_tag_in_series(from_tag, repo):
         if len(batch) < 100:
             break
         page += 1
-    series = [t for t in tags if t.startswith(prefix)]
-    if not series:
+    return tags
+
+
+def get_latest_tag_in_series(from_tag, repo):
+    """Return the newest tag sharing the same major.minor version as from_tag."""
+    match = re.match(r"^v?(\d+)\.(\d+)", from_tag)
+    if not match:
         return None
+    prefix = f"v{match.group(1)}.{match.group(2)}."
+    series = [t for t in fetch_all_tags(repo) if t.startswith(prefix)]
+    return sorted(series, key=version_key)[-1] if series else None
 
-    def version_key(tag):
-        base = tag.split("-")[0]  # strip pre-release suffix (e.g. -beta1, -rc1)
-        nums = tuple(int(n) for n in re.findall(r"\d+", base))
-        return (nums, "-" not in tag)  # releases sort above pre-releases of same version
 
-    return sorted(series, key=version_key)[-1]
+def resolve_wildcard_tag(pattern, repo):
+    """Return the newest tag matching a glob pattern such as '6.1.*' or 'v6.1.*'."""
+    if not pattern.startswith("v"):
+        pattern = "v" + pattern
+    matches = [t for t in fetch_all_tags(repo) if fnmatch.fnmatch(t, pattern)]
+    return sorted(matches, key=version_key)[-1] if matches else None
 
 
 def dump_raw(release_body, commits, tag, milestone_items=None):
@@ -402,7 +418,13 @@ def main():
     args = parser.parse_args()
 
     to_tag = args.to_tag
-    if not to_tag:
+    if to_tag and ("*" in to_tag or "?" in to_tag):
+        print(f"Resolving wildcard pattern {to_tag!r}...", file=sys.stderr)
+        to_tag = resolve_wildcard_tag(to_tag, args.repo)
+        if not to_tag:
+            parser.error(f"No tags matched pattern {args.to_tag!r} in {args.repo}")
+        print(f"  Using --to-tag {to_tag}", file=sys.stderr)
+    elif not to_tag:
         if not args.from_tag:
             parser.error("--to-tag or --from-tag is required")
         print(
