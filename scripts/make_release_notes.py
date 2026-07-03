@@ -329,7 +329,9 @@ def get_latest_tag_in_series(from_tag, repo):
         return None
 
     def version_key(tag):
-        return tuple(int(n) for n in re.findall(r"\d+", tag))
+        base = tag.split("-")[0]  # strip pre-release suffix (e.g. -beta1, -rc1)
+        nums = tuple(int(n) for n in re.findall(r"\d+", base))
+        return (nums, "-" not in tag)  # releases sort above pre-releases of same version
 
     return sorted(series, key=version_key)[-1]
 
