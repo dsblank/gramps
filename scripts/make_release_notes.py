@@ -23,6 +23,9 @@ Usage:
     # First run — fetches from GitHub, saves cache, generates notes
     python3 scripts/make_release_notes.py --to-tag v6.1.0-beta1 --from-tag v6.0.7
 
+    # --to-tag defaults to the latest tag in the same major.minor series
+    python3 scripts/make_release_notes.py --from-tag v6.0.7
+
     # Re-run — loads cache automatically, no GitHub calls
     python3 scripts/make_release_notes.py --to-tag v6.1.0-beta1
 
@@ -301,6 +304,36 @@ def format_milestone_section(items, repo):
     return "\n".join(lines) + "\n"
 
 
+def get_latest_tag_in_series(from_tag, repo):
+    """Return the newest tag sharing the same major.minor version as from_tag."""
+    match = re.match(r"^v?(\d+)\.(\d+)", from_tag)
+    if not match:
+        return None
+    prefix = f"v{match.group(1)}.{match.group(2)}."
+    tags = []
+    page = 1
+    while True:
+        output = gh(
+            "api",
+            f"repos/{repo}/tags?per_page=100&page={page}",
+            "--jq",
+            "[.[].name]",
+        )
+        batch = json.loads(output)
+        tags.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    series = [t for t in tags if t.startswith(prefix)]
+    if not series:
+        return None
+
+    def version_key(tag):
+        return tuple(int(n) for n in re.findall(r"\d+", tag))
+
+    return sorted(series, key=version_key)[-1]
+
+
 def dump_raw(release_body, commits, tag, milestone_items=None):
     print(f"=== Release body for {tag} ===\n")
     print(release_body)
@@ -318,7 +351,14 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate Gramps release notes using gh CLI + an LLM via litellm"
     )
-    parser.add_argument("--to-tag", required=True, help="Release tag, e.g. v6.1.0-beta1")
+    parser.add_argument(
+        "--to-tag",
+        default=None,
+        help=(
+            "Release tag, e.g. v6.1.0-beta1. "
+            "Defaults to the latest tag in the same major.minor series as --from-tag."
+        ),
+    )
     parser.add_argument(
         "--from-tag",
         default=None,
@@ -359,7 +399,21 @@ def main():
     )
     args = parser.parse_args()
 
-    version = args.to_tag.lstrip("v")
+    to_tag = args.to_tag
+    if not to_tag:
+        if not args.from_tag:
+            parser.error("--to-tag or --from-tag is required")
+        print(
+            f"Resolving latest tag in series from {args.from_tag}...", file=sys.stderr
+        )
+        to_tag = get_latest_tag_in_series(args.from_tag, args.repo)
+        if not to_tag:
+            parser.error(
+                f"No tags found in the same series as {args.from_tag} in {args.repo}"
+            )
+        print(f"  Using --to-tag {to_tag}", file=sys.stderr)
+
+    version = to_tag.lstrip("v")
     output_path = Path(args.output or f"RELEASE_NOTES_{version}.md")
     cache_path = Path(f"RELEASE_DATA_{version}.json")
 
@@ -383,7 +437,7 @@ def main():
         if not args.from_tag:
             parser.error("--from-tag is required when no cache file exists (or with --no-cache)")
 
-        tag = args.to_tag
+        tag = to_tag
         from_tag = args.from_tag
         repo = args.repo
 
