@@ -238,7 +238,6 @@ Output only the Markdown. No preamble, no explanation."""
     print(f"Calling {model}...", file=sys.stderr)
     response = litellm.completion(
         model=model,
-        max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content
@@ -531,7 +530,7 @@ def main():
     if milestone_items is not None:
         notes += format_milestone_section(milestone_items, repo)
 
-    output_path.write_text(notes)
+    output_path.write_text(notes, encoding="utf-8")
     print(f"Written to {output_path}", file=sys.stderr)
 
 
