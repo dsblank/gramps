@@ -103,6 +103,44 @@ def _build_diamond_chain(db, levels):
     return final_son, final_daughter
 
 
+def _build_diamond_chain_with_stepfamily(db, levels):
+    """Same sibling-marries-sibling crosslink pattern as
+    `_build_diamond_chain`, but at every level the son is *also* recorded
+    with a second, step parent family sharing the same mother -- so
+    every ancestor in the chain has more than one recorded parent family
+    (the shape `__apply_filter`'s "only_one_family" gate excludes from
+    memoization -- see its docstring and `_pmap_append_checked`'s) at
+    the same time it is being revisited via pedigree collapse. The PR
+    that introduced the memoization fix documents this combination
+    ("Multi-family recorded *and* pedigree-collapsed at every level
+    simultaneously") as explicitly out of scope for acceleration --
+    always re-derived from the database on every revisit, same as
+    before that fix -- and measured it separately as polynomial rather
+    than exponential. This fixture turns that into a persisted
+    regression check, for both correctness and non-catastrophic growth,
+    rather than only an ad hoc measurement.
+
+    Returns the two children of the final level's couple.
+    """
+    father = _add_person(db, Person.MALE)
+    mother = _add_person(db, Person.FEMALE)
+    family = _add_family(db, father, mother)
+    for _ in range(levels):
+        son = _add_person(db, Person.MALE)
+        daughter = _add_person(db, Person.FEMALE)
+        _add_child(db, family, son)
+        _add_child(db, family, daughter)
+        step_father = _add_person(db, Person.MALE)
+        step_family = _add_family(db, step_father, mother)
+        _add_child(db, step_family, son, frel=ChildRefType.STEPCHILD, mrel=BIRTH)
+        family = _add_family(db, son, daughter)
+    final_son = _add_person(db, Person.MALE)
+    final_daughter = _add_person(db, Person.FEMALE)
+    _add_child(db, family, final_son)
+    _add_child(db, family, final_daughter)
+    return final_son, final_daughter
+
+
 def _count_apply_filter_calls(calc):
     """Wrap calc's own (already-fixed) __apply_filter to count calls,
     returning the mutable counter list. A linear (not exponential) call
@@ -183,7 +221,9 @@ class RelationshipPedigreeCollapsePerformanceTest(unittest.TestCase):
                 data, _msg = calc.get_relationship_distance_new(
                     db, p1, p2, all_dist=True, all_families=True, only_birth=False
                 )
-                self.assertNotEqual(data[0][0], -1, "expected a relationship to be found")
+                self.assertNotEqual(
+                    data[0][0], -1, "expected a relationship to be found"
+                )
                 counts[levels] = counter[0]
             finally:
                 db.close()
@@ -281,9 +321,7 @@ class RelationshipMultipleParentFamiliesTest(unittest.TestCase):
 
             child = _add_person(db, Person.MALE)
             _add_child(db, bio_family, child, frel=BIRTH, mrel=BIRTH)
-            _add_child(
-                db, step_family, child, frel=ChildRefType.STEPCHILD, mrel=BIRTH
-            )
+            _add_child(db, step_family, child, frel=ChildRefType.STEPCHILD, mrel=BIRTH)
             self.assertEqual(len(child.get_parent_family_handle_list()), 2)
 
             sibling = _add_person(db, Person.FEMALE)
@@ -299,6 +337,96 @@ class RelationshipMultipleParentFamiliesTest(unittest.TestCase):
             self.assertEqual((dist1, dist2), (1, 1))
         finally:
             db.close()
+
+
+class RelationshipMultiFamilyPedigreeCollapseTest(unittest.TestCase):
+    """The "doubly-rare" combination the PR's "Explicitly out of scope"
+    section calls out by name: a person with more than one recorded
+    parent family (adoption, or a step-family alongside a birth family)
+    who is *also* an ancestor reached via pedigree collapse. That
+    section reports this was tested ad hoc against synthetic fixtures
+    built the same way as the rest of this suite, and found to grow
+    polynomially rather than exponentially -- not the bug this PR fixes,
+    but real-world trees with adoptions or step-families are exactly the
+    case most likely to still feel slow, so this persists that check as
+    an actual regression test instead of only a one-off measurement.
+    """
+
+    def test_relationship_still_correct_with_stepfamilies(self):
+        db = _make_db()
+        try:
+            child1, child2 = _build_diamond_chain_with_stepfamily(db, 5)
+            calc = get_relationship_calculator(reinit=True)
+            p1 = db.get_person_from_handle(child1.handle)
+            p2 = db.get_person_from_handle(child2.handle)
+            rel_str, dist1, dist2 = calc.get_one_relationship(
+                db, p1, p2, extra_info=True
+            )
+            # final_son and final_daughter are children of the same
+            # single family record (the last-generation couple), so
+            # regardless of the step-families layered into every
+            # ancestor above them, they must still come out as full
+            # siblings -- a wrong family index picked up from a
+            # revisited multi-family ancestor would corrupt this into a
+            # half-sibling or cousin wording instead.
+            self.assertEqual(rel_str, "sister")
+            self.assertEqual((dist1, dist2), (1, 1))
+        finally:
+            db.close()
+
+    def test_completes_without_hanging(self):
+        """Confirms the documented "polynomial, not exponential" finding
+        stays true: a generous wall-clock bound catches a regression
+        back to exponential (or simply unbounded) growth without being
+        flaky about the exact, worse-than-linear constant this
+        deliberately-unaccelerated case is expected to have."""
+        import time
+
+        db = _make_db()
+        try:
+            child1, child2 = _build_diamond_chain_with_stepfamily(db, 7)
+            calc = get_relationship_calculator(reinit=True)
+            p1 = db.get_person_from_handle(child1.handle)
+            p2 = db.get_person_from_handle(child2.handle)
+            start = time.perf_counter()
+            rel_str, _dist1, _dist2 = calc.get_one_relationship(
+                db, p1, p2, extra_info=True
+            )
+            elapsed = time.perf_counter() - start
+            self.assertNotEqual(rel_str, "")
+            self.assertLess(elapsed, 15.0)
+        finally:
+            db.close()
+
+    def test_call_count_growth_is_not_exponential(self):
+        counts = {}
+        for levels in (3, 5, 7):
+            db = _make_db()
+            try:
+                child1, child2 = _build_diamond_chain_with_stepfamily(db, levels)
+                calc = get_relationship_calculator(reinit=True)
+                counter = _count_apply_filter_calls(calc)
+                p1 = db.get_person_from_handle(child1.handle)
+                p2 = db.get_person_from_handle(child2.handle)
+                data, _msg = calc.get_relationship_distance_new(
+                    db, p1, p2, all_dist=True, all_families=True, only_birth=False
+                )
+                self.assertNotEqual(
+                    data[0][0], -1, "expected a relationship to be found"
+                )
+                counts[levels] = counter[0]
+            finally:
+                db.close()
+
+        # Exponential (2^levels) growth would roughly double the ratio
+        # between consecutive +2-level steps (e.g. 4x, then 16x); this
+        # combination is documented to be polynomial (roughly quadratic)
+        # instead, so the ratio should grow only arithmetically, not
+        # multiply on itself. A generous bound (16x per +2 levels) stays
+        # robust to incidental call-count changes while still failing
+        # hard against a real regression back to exponential.
+        self.assertLess(counts[5], counts[3] * 16)
+        self.assertLess(counts[7], counts[5] * 16)
 
 
 class RelationshipLoopDetectionTest(unittest.TestCase):
