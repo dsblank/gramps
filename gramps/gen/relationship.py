@@ -1353,7 +1353,11 @@ class RelationshipCalculator:
         last_kept = None
         for i in order:
             rel_str = pairs[i][0]
-            if last_kept is not None and len(last_kept) < len(rel_str) and rel_str.startswith(last_kept):
+            if (
+                last_kept is not None
+                and len(last_kept) < len(rel_str)
+                and rel_str.startswith(last_kept)
+            ):
                 continue
             keep.add(i)
             last_kept = rel_str
@@ -1547,7 +1551,10 @@ class RelationshipCalculator:
                             if not rec["alive"]:
                                 continue
                             other_rel2 = rec["rel2"]
-                            if rec["rank"] <= rank and other_rel2 == rel2[: len(other_rel2)]:
+                            if (
+                                rec["rank"] <= rank
+                                and other_rel2 == rel2[: len(other_rel2)]
+                            ):
                                 dominated = True
                                 break
                         if dominated:
@@ -1671,7 +1678,11 @@ class RelationshipCalculator:
         pmap[handle][1] += [rel_fam]
         if loop:
             self.__loop_detected = True
-            relation = rel_str[len(shorter_existing):] if shorter_existing is not None else longer_existing[len(rel_str):]
+            relation = (
+                rel_str[len(shorter_existing) :]
+                if shorter_existing is not None
+                else longer_existing[len(rel_str) :]
+            )
             self.__msg += [
                 _("Relationship loop detected:")
                 + " "
@@ -1752,7 +1763,9 @@ class RelationshipCalculator:
             # had lookup of all parents, we call that a crosslink
             if not stoprecursemap:
                 self.__crosslinks = True
-            if self._pmap_append_checked(memo, pmap, person.handle, rel_str, rel_fam, person):
+            if self._pmap_append_checked(
+                memo, pmap, person.handle, rel_str, rel_fam, person
+            ):
                 return
         elif store:
             pmap[person.handle] = [[rel_str], [rel_fam]]
@@ -1819,13 +1832,20 @@ class RelationshipCalculator:
                         if target_handle in pmap:
                             if not stoprecursemap:
                                 self.__crosslinks = True
-                            if self._pmap_append_checked(memo, pmap, target_handle, full_str, full_fam, target):
+                            if self._pmap_append_checked(
+                                memo, pmap, target_handle, full_str, full_fam, target
+                            ):
                                 return
                         elif store:
                             pmap[target_handle] = [[full_str], [full_fam]]
                         for rec in memo["open"]:
                             rec["deltas"].append(
-                                ("v", full_str[rec["base_str"] :], full_fam[rec["base_fam"] :], target)
+                                (
+                                    "v",
+                                    full_str[rec["base_str"] :],
+                                    full_fam[rec["base_fam"] :],
+                                    target,
+                                )
                             )
                     else:  # "s": a sibling injected via the no-recorded-
                         # parents case below, a direct pmap write in the
@@ -1839,13 +1859,22 @@ class RelationshipCalculator:
                             pmap[target] = [[full_str], [full_fam]]
                         for rec in memo["open"]:
                             rec["deltas"].append(
-                                ("s", full_str[rec["base_str"] :], full_fam[rec["base_fam"] :], target)
+                                (
+                                    "s",
+                                    full_str[rec["base_str"] :],
+                                    full_fam[rec["base_fam"] :],
+                                    target,
+                                )
                             )
                 return
 
         recorder = None
         if only_one_family:
-            recorder = {"base_str": len(rel_str), "base_fam": len(rel_fam), "deltas": []}
+            recorder = {
+                "base_str": len(rel_str),
+                "base_fam": len(rel_fam),
+                "deltas": [],
+            }
             memo["open"].append(recorder)
 
         try:
